@@ -1,3 +1,4 @@
-export function getAssetPath(path: string): string {
-  return `/${path}`;
+export function getAssetPath(assetPath: string): string {
+  const base = import.meta.env.BASE_URL || "/";
+  return `${base.replace(/\/$/, "")}/${assetPath.replace(/^\//, "")}`;
 }

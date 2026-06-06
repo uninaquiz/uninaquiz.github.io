@@ -25,7 +25,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <BrowserRouter basename="/">
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <div className="min-h-screen text-white" style={{ background: "#0B132B" }}>
         <Header username={loggedUser} onLogout={handleLogout} />
         <Routes>
