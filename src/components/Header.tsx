@@ -21,16 +21,19 @@ export const Header: React.FC<Props> = ({ username, onLogout }) => {
     >
       <nav className="container mx-auto px-6 h-16 flex items-center justify-between">
 
-        {/* Logo — clicável, volta pra home */}
-        <div onClick={() => navigate("/")} style={{ cursor: "pointer" }}>
+        {/* Fix 4: logo como <button> para acessibilidade */}
+        <button
+          type="button"
+          onClick={() => navigate("/")}
+          style={{ cursor: "pointer", background: "none", border: "none", padding: 0 }}
+        >
           <img
             src={getAssetPath("assets/logo-header.png")}
             alt="Checkpoint Quiz"
             style={{ height: "44px", width: "auto", objectFit: "contain", maxWidth: "200px" }}
           />
-        </div>
+        </button>
 
-        {/* Direita: nome do jogador + botão sair */}
         <div className="flex items-center gap-4">
           <span style={{ color: "#8899bb", fontSize: "0.75rem" }}>
             Jogador:{" "}

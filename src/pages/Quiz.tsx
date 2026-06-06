@@ -197,6 +197,7 @@ export const Quiz: React.FC<Props> = ({ username }) => {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={toggleMute}
+              aria-label={muted ? "Ativar sons" : "Silenciar sons"}
               className="px-3 py-1.5 text-xs font-bold tracking-wide rounded transition-all"
               style={{ background: "#1a2850", border: `1px solid ${muted ? "#ff4d6d" : "#1e3060"}`, color: muted ? "#ff4d6d" : "#8899bb", cursor: "pointer", fontFamily: "Montserrat" }}>
               {muted ? "🔇" : "🔊"}

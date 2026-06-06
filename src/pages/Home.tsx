@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { apiGetHistory, apiDeleteHistory, HistoryItem } from "@/services/api";
 
 type Difficulty = "easy" | "medium" | "hard";
-
 interface Props { username: string; }
 
 export const Home: React.FC<Props> = ({ username }) => {
@@ -35,6 +34,10 @@ export const Home: React.FC<Props> = ({ username }) => {
     easy:   { background: "#003322", color: "#00FF87" },
     medium: { background: "#332200", color: "#ffb800" },
     hard:   { background: "#330011", color: "#ff4d6d" },
+  };
+
+  const goToQuiz = (item: HistoryItem) => {
+    navigate("/quiz", { state: { topic: item.topic, difficulty: item.difficulty } });
   };
 
   return (
@@ -114,8 +117,12 @@ export const Home: React.FC<Props> = ({ username }) => {
           ) : (
             <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
               {[...history].reverse().map(item => (
+                // Fix 6: role="button" + tabIndex + onKeyDown para acessibilidade
                 <div key={item.id}
-                  onClick={() => navigate("/quiz", { state: { topic: item.topic, difficulty: item.difficulty } })}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => goToQuiz(item)}
+                  onKeyDown={e => { if (e.key === "Enter" || e.key === " ") goToQuiz(item); }}
                   className="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition-all"
                   style={{ background: "#0f1d40", border: "1px solid #1e3060" }}
                   onMouseEnter={e => (e.currentTarget.style.borderColor = "#00FF87")}
@@ -133,10 +140,14 @@ export const Home: React.FC<Props> = ({ username }) => {
                     <span className="text-sm font-bold" style={{ color: "#00FF87", fontFamily: "'Orbitron',sans-serif" }}>
                       {item.score ?? "—"}/{item.total}
                     </span>
-                    <button onClick={e => { e.stopPropagation(); handleDelete(item.id); }}
+                    {/* Fix 5: aria-label no botão deletar */}
+                    <button
+                      onClick={e => { e.stopPropagation(); handleDelete(item.id); }}
+                      aria-label={`Excluir histórico: ${item.topic}`}
                       style={{ color: "#8899bb", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem" }}
                       onMouseEnter={e => (e.currentTarget.style.color = "#ff4d6d")}
-                      onMouseLeave={e => (e.currentTarget.style.color = "#8899bb")}>✕</button>
+                      onMouseLeave={e => (e.currentTarget.style.color = "#8899bb")}
+                    >✕</button>
                   </div>
                 </div>
               ))}
