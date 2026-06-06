@@ -1,217 +1,286 @@
-import React, { useEffect, useState, useRef } from "react";
-import { IntroScreen } from "@/components/IntroScreen";
-import { GameScreen } from "@/components/GameScreen";
-import { ResultScreen } from "@/components/ResultScreen";
-import { Narrator, NarratorHandle } from "@/components/Narrator";
-import { MusicModal } from "@/components/MusicModal";
-import { QuizProvider, useQuiz } from "@/contexts/QuizContext";
-import { AudioProvider, useAudio } from "@/contexts/AudioContext";
-import { useGameLogic } from "@/hooks/useGameLogic";
-import { GameStatus } from "@/types";
-import { ttsService } from "@/services/ttsService";
+import React, { useState, useEffect, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getAssetPath } from "@/utils/assets";
 import { audioService } from "@/services/audioService";
+import { apiGenerateQuiz, apiSaveHistory, GeneratedQuestion } from "@/services/api";
 
-export const Quiz: React.FC = () => {
-  return (
-    <QuizProvider>
-      <AudioProvider>
-        <QuizContent />
-      </AudioProvider>
-    </QuizProvider>
-  );
-};
+type Difficulty = "easy" | "medium" | "hard";
 
-const MultimediaBackground: React.FC = () => {
-  return (
-    <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-      <img
-        key="quiz-background"
-        src={getAssetPath("assets/background.png")}
-        alt="EduVoice Background"
-        className="absolute top-0 left-0 w-full h-full object-cover animate-fade-in"
-        loading="eager"
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-900/90 via-slate-900/60 to-slate-900/90"></div>
-      <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
-    </div>
-  );
-};
+interface Question extends GeneratedQuestion { id: number; }
 
-const GameSession: React.FC = () => {
-  const { currentQuiz, exitQuiz } = useQuiz();
-  const narratorRef = useRef<NarratorHandle>(null);
+interface QuizSession {
+  id: string;
+  topic: string;
+  difficulty: Difficulty;
+  questions: Question[];
+  createdAt: number;
+}
 
-  if (!currentQuiz) return null;
+interface AnswerState { selected: number; correct: boolean; }
+interface Props { username: string; }
 
-  const { gameState, startGame, handleOptionSelect, navigateQuestion } =
-    useGameLogic(currentQuiz.questions, narratorRef, exitQuiz);
+function spawnConfetti() {
+  const colors = ["#00FF87","#00ccff","#ffb800","#ff4d6d","#ffffff"];
+  for (let i = 0; i < 60; i++) {
+    setTimeout(() => {
+      const c = document.createElement("div");
+      c.style.cssText = `position:fixed;pointer-events:none;z-index:1000;border-radius:2px;
+        left:${Math.random()*100}vw;top:-20px;
+        background:${colors[Math.floor(Math.random()*colors.length)]};
+        width:${6+Math.random()*8}px;height:${6+Math.random()*8}px;
+        animation:confettiFall ${1.5+Math.random()*2}s ${Math.random()*0.5}s linear forwards;
+        transform:rotate(${Math.random()*360}deg);`;
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), 4000);
+    }, i * 30);
+  }
+}
+
+export const Quiz: React.FC<Props> = ({ username }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { topic, difficulty } = (location.state || {}) as { topic?: string; difficulty?: Difficulty };
+
+  const [session, setSession] = useState<QuizSession | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [qIndex, setQIndex] = useState(0);
+  const [score, setScore] = useState(0);
+  const [answers, setAnswers] = useState<(AnswerState | null)[]>([]);
+  const [finished, setFinished] = useState(false);
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
-    startGame();
-    return () => {
-      ttsService.cancel();
-    };
-  }, [startGame]);
+    if (!topic) { navigate("/"); return; }
+    (async () => {
+      try {
+        const qs = await apiGenerateQuiz(topic, difficulty || "easy");
+        const s: QuizSession = {
+          id: crypto.randomUUID(), topic,
+          difficulty: difficulty || "easy",
+          questions: qs.map((q, i) => ({ ...q, id: i + 1 })),
+          createdAt: Date.now(),
+        };
+        setSession(s);
+        setAnswers(Array(s.questions.length).fill(null));
+      } catch (e: any) {
+        setError(e.message || "Erro ao gerar quiz");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
-  const viewStrategies = {
-    [GameStatus.PLAYING]: () => (
-      <GameScreen
-        question={currentQuiz.questions[gameState.currentQuestionIndex]}
-        currentQuestionIndex={gameState.currentQuestionIndex}
-        totalQuestions={currentQuiz.questions.length}
-        score={gameState.score}
-        selectedOption={gameState.selectedOption}
-        status={gameState.status}
-        onOptionSelect={handleOptionSelect}
-        onNavigate={navigateQuestion}
-      />
-    ),
-    [GameStatus.FEEDBACK]: () => (
-      <GameScreen
-        question={currentQuiz.questions[gameState.currentQuestionIndex]}
-        currentQuestionIndex={gameState.currentQuestionIndex}
-        totalQuestions={currentQuiz.questions.length}
-        score={gameState.score}
-        selectedOption={gameState.selectedOption}
-        status={gameState.status}
-        onOptionSelect={handleOptionSelect}
-        onNavigate={navigateQuestion}
-      />
-    ),
-    [GameStatus.FINISHED]: () => (
-      <ResultScreen
-        score={gameState.score}
-        totalQuestions={currentQuiz.questions.length}
-        onRestart={exitQuiz}
-      />
-    ),
-    [GameStatus.INTRO]: () => null,
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    audioService.setMuted(next);
   };
 
-  return (
-    <div className="w-full max-w-4xl flex flex-col items-center pt-8 relative">
-      <button
-        onClick={exitQuiz}
-        className="fixed top-24 sm:top-[5.5rem] left-3 sm:left-4 p-2 rounded-full bg-slate-800/80 backdrop-blur border border-slate-700 text-slate-400 hover:text-white hover:bg-red-500/20 hover:border-red-500/50 transition-all duration-200 z-50 group shadow-lg"
-        aria-label="Sair do Quiz"
-        title="Sair para o menu inicial"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="group-hover:scale-90 transition-transform"
-        >
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      </button>
+  const selectOption = useCallback((idx: number) => {
+    if (!session || answers[qIndex]) return;
+    const q = session.questions[qIndex];
+    const correct = idx === q.correctIndex;
+    const updated = [...answers];
+    updated[qIndex] = { selected: idx, correct };
+    setAnswers(updated);
+    if (correct) setScore(s => s + 1);
+    audioService.playSFX(correct ? "correct" : "wrong");
+  }, [session, answers, qIndex]);
 
-      <div className="mb-4 text-indigo-300/80 text-xs font-bold tracking-[0.2em] uppercase border border-indigo-500/30 px-3 py-1 rounded-full bg-indigo-500/10">
-        {currentQuiz.topic}
-      </div>
+  const advance = useCallback(async (dir: 1 | -1) => {
+    if (!session) return;
+    audioService.playSFX("click");
+    const next = qIndex + dir;
 
-      <Narrator ref={narratorRef} />
+    if (next >= session.questions.length) {
+      const finalScore = answers.filter(a => a?.correct).length;
+      await apiSaveHistory(username, {
+        id: session.id, topic: session.topic,
+        difficulty: session.difficulty,
+        score: finalScore, total: session.questions.length,
+        createdAt: session.createdAt,
+      }).catch(console.error);
+      setFinished(true);
+      if (finalScore / session.questions.length >= 0.6) spawnConfetti();
+      return;
+    }
+    if (next < 0) return;
+    setQIndex(next);
+  }, [session, qIndex, answers, username]);
 
-      {viewStrategies[gameState.status]?.()}
+  if (!topic) return null;
+
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 relative z-10 pt-20">
+      <div className="loader-ring" />
+      <p className="text-xs tracking-widest" style={{ color: "#8899bb" }}>GERANDO MASMORRA DO QUIZ...</p>
     </div>
   );
-};
 
-const QuizContent: React.FC = () => {
-  const { currentQuiz } = useQuiz();
-  const { config } = useAudio();
-  const [isMusicModalOpen, setIsMusicModalOpen] = useState(false);
+  if (error) return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 relative z-10 pt-20 px-4">
+      <div className="text-center p-8 rounded-2xl max-w-md"
+        style={{ background: "#121e3d", border: "1px solid #ff4d6d" }}>
+        <p className="font-bold mb-2" style={{ color: "#ff4d6d" }}>ERRO AO GERAR QUIZ</p>
+        <p className="text-sm mb-6" style={{ color: "#8899bb" }}>{error}</p>
+        <button onClick={() => navigate("/")}
+          className="px-6 py-3 font-bold text-sm clip-chamfer-sm"
+          style={{ background: "#00FF87", color: "#0B132B", borderRadius: "8px", border: "none", cursor: "pointer", fontFamily: "Montserrat" }}>
+          ← VOLTAR
+        </button>
+      </div>
+    </div>
+  );
 
-  useEffect(() => {
-    const startAudio = async () => {
-      try {
-        console.log("[Quiz] Iniciando áudio...");
-        console.log("[Quiz] Config:", config);
-        await audioService.initialize();
-        console.log("[Quiz] AudioService inicializado");
+  // ── Tela de resultado ──────────────────────────────────────
+  if (finished && session) {
+    const total = session.questions.length;
+    const pct = Math.round(score / total * 100);
+    const msgs = [
+      [80, "Impressionante! Você é um verdadeiro expert!"],
+      [60, "Muito bem! Continue assim e vai dominar o assunto!"],
+      [40, "Bom trabalho! Revise os erros e volte mais forte!"],
+      [0,  "Não desista! Todo mestre já foi iniciante. Continue!"],
+    ];
+    const msg = (msgs.find(([m]) => pct >= (m as number)) || msgs[3])[1] as string;
 
-        // Play the currently active track
-        if (!config.isMuted && config.musicVolume > 0) {
-          console.log("[Quiz] Tentando tocar:", config.activeTrack);
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 relative z-10 pt-20">
+        <div className="relative overflow-hidden rounded-2xl p-12 text-center max-w-md w-full animate-fade-in-up top-line"
+          style={{ background: "#121e3d", border: "1px solid #1e3060" }}>
+          <img src={getAssetPath("assets/favicon-robot.png")} alt="Bot"
+            className="w-24 h-24 mx-auto mb-5 animate-float"
+            style={{ filter: "drop-shadow(0 0 24px #00FF87)" }} />
+          <h2 className="text-xl font-black mb-2 tracking-wide"
+            style={{ color: "#00FF87", fontFamily: "'Orbitron',sans-serif" }}>CHECKPOINT ATINGIDO!</h2>
+          <div className="text-6xl font-black my-3" style={{ fontFamily: "'Orbitron',sans-serif" }}>
+            {score}<span style={{ color: "#00FF87" }}>/{total}</span>
+          </div>
+          <div className="text-2xl font-bold mb-4" style={{ color: "#00FF87", fontFamily: "'Orbitron',sans-serif" }}>{pct}%</div>
+          <p className="text-sm leading-relaxed mb-2" style={{ color: "#ccc" }}>{msg}</p>
+          <p className="text-xs mb-8" style={{ color: "#8899bb" }}>Checkpoint Quiz espera por você no próximo desafio.</p>
+          <button onClick={() => navigate("/")}
+            className="px-8 py-4 font-black text-sm tracking-wide clip-chamfer"
+            style={{ background: "#00FF87", color: "#0B132B", borderRadius: "8px", border: "none", cursor: "pointer", fontFamily: "Montserrat" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "#33ffaa")}
+            onMouseLeave={e => (e.currentTarget.style.background = "#00FF87")}>
+            ↩ NOVO DESAFIO
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-          if (config.activeTrack === "upload" && config.customFileBlobUrl) {
-            await audioService.playTrack("upload");
-            await audioService.playFile(config.customFileBlobUrl);
-          } else if (config.activeTrack !== "upload") {
-            await audioService.playTrack(config.activeTrack);
-          }
+  if (!session) return null;
 
-          console.log("[Quiz] Áudio iniciado com sucesso");
-        }
-      } catch (e) {
-        console.error("Erro ao iniciar áudio:", e);
-      }
-    };
-
-    startAudio();
-
-    // Cleanup: Stop music when leaving the Quiz page
-    return () => {
-      console.log("[Quiz] Saindo da página, parando música...");
-      audioService.stopMusic();
-      ttsService.cancel();
-    };
-  }, [
-    config.activeTrack,
-    config.isMuted,
-    config.musicVolume,
-    config.customFileBlobUrl,
-  ]);
+  const q = session.questions[qIndex];
+  const total = session.questions.length;
+  const answered = answers[qIndex];
+  const labels = ["A","B","C","D"];
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 pt-20 relative overflow-x-hidden">
-      <MultimediaBackground />
+    <div className="min-h-screen pt-20 pb-8 px-4 relative z-10">
+      <div className="fixed inset-0 pointer-events-none z-0"
+        style={{ background: "repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,135,0.01) 2px,rgba(0,255,135,0.01) 4px)" }} />
+      <div className="max-w-2xl mx-auto relative z-10">
 
-      <button
-        onClick={() => setIsMusicModalOpen(!isMusicModalOpen)}
-        className={`fixed top-24 sm:top-[5.5rem] right-3 sm:right-4 p-2 rounded-full backdrop-blur border transition-all duration-200 z-50 group shadow-lg ${
-          isMusicModalOpen
-            ? "bg-indigo-500/30 border-indigo-500 text-white"
-            : "bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white hover:bg-indigo-500/20 hover:border-indigo-500/50"
-        }`}
-        aria-label="Configurações de Áudio"
-        title="Configurações de Áudio"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="group-hover:scale-110 transition-transform"
-        >
-          <path d="M9 18V5l12-2v13"></path>
-          <circle cx="6" cy="18" r="3"></circle>
-          <circle cx="18" cy="16" r="3"></circle>
-        </svg>
-      </button>
+        {/* Header row */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="px-3 py-1.5 rounded-full text-xs font-bold tracking-widest truncate max-w-[160px]"
+            style={{ background: "#1a2850", border: "1px solid #1e3060", color: "#00FF87" }}>
+            {session.topic.toUpperCase()}
+          </div>
+          <div className="flex items-center gap-1.5" style={{ fontFamily: "'Orbitron',sans-serif" }}>
+            <span style={{ color: "#ffb800" }}>★</span>
+            <span className="font-bold text-sm">{score}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={toggleMute}
+              className="px-3 py-1.5 text-xs font-bold tracking-wide rounded transition-all"
+              style={{ background: "#1a2850", border: `1px solid ${muted ? "#ff4d6d" : "#1e3060"}`, color: muted ? "#ff4d6d" : "#8899bb", cursor: "pointer", fontFamily: "Montserrat" }}>
+              {muted ? "🔇" : "🔊"}
+            </button>
+            <button onClick={() => navigate("/")}
+              className="px-3 py-1.5 text-xs font-bold tracking-wide rounded transition-all"
+              style={{ background: "#1a2850", border: "1px solid #1e3060", color: "#8899bb", cursor: "pointer", fontFamily: "Montserrat" }}
+              onMouseEnter={e => { (e.currentTarget.style.borderColor="#ff4d6d"); (e.currentTarget.style.color="#ff4d6d"); }}
+              onMouseLeave={e => { (e.currentTarget.style.borderColor="#1e3060"); (e.currentTarget.style.color="#8899bb"); }}>
+              ✕ SAIR
+            </button>
+          </div>
+        </div>
 
-      <MusicModal isOpen={isMusicModalOpen} />
+        {/* Progress */}
+        <div className="flex justify-between text-xs font-bold mb-2" style={{ color: "#8899bb" }}>
+          <span>QUESTÃO {qIndex+1}/{total}</span>
+        </div>
+        <div className="h-1 rounded-full mb-6 overflow-hidden" style={{ background: "#1a2850" }}>
+          <div className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${((qIndex+1)/total)*100}%`, background: "linear-gradient(90deg,#00cc6a,#00FF87)", boxShadow: "0 0 8px rgba(0,255,135,0.4)" }} />
+        </div>
 
-      <main className="z-10 w-full flex flex-col items-center justify-center flex-1">
-        {!currentQuiz ? <IntroScreen /> : <GameSession />}
-      </main>
+        {/* Question */}
+        <div className="relative overflow-hidden rounded-2xl p-8 mb-5 top-line animate-fade-in-up"
+          style={{ background: "#121e3d", border: "1px solid #1e3060" }}>
+          <p className="text-xs font-bold tracking-widest mb-3" style={{ color: "#00FF87" }}>QUESTÃO {qIndex+1}</p>
+          <p className="text-lg sm:text-xl font-bold leading-snug text-white">{q.text}</p>
+        </div>
 
-      <footer className="absolute bottom-4 text-slate-500 text-xs font-medium z-0 hidden md:block">
-        EduVoice Interactive • Sistema Multimídia
-      </footer>
+        {/* Options */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          {q.options.map((opt, i) => {
+            let style: React.CSSProperties = { background: "#1a2850", border: "1px solid #1e3060", color: "#fff", fontFamily: "Montserrat" };
+            let faded = false;
+            if (answered) {
+              if (i === q.correctIndex) style = { background: "rgba(0,255,135,0.15)", border: "1px solid #00FF87", color: "#00FF87", fontFamily: "Montserrat" };
+              else if (i === answered.selected) style = { background: "rgba(255,77,109,0.15)", border: "1px solid #ff4d6d", color: "#ff4d6d", fontFamily: "Montserrat" };
+              else faded = true;
+            }
+            return (
+              <button key={i} onClick={() => selectOption(i)} disabled={!!answered}
+                className={`w-full p-4 rounded-xl text-left text-sm font-semibold leading-snug transition-all flex items-start gap-3 clip-chamfer-sm ${faded ? "opacity-30" : ""}`}
+                style={{ ...style, cursor: answered ? "default" : "pointer" }}
+                onMouseEnter={e => { if (!answered) { (e.currentTarget.style.borderColor="#00FF87"); (e.currentTarget.style.transform="translateY(-2px)"); } }}
+                onMouseLeave={e => { if (!answered) { (e.currentTarget.style.borderColor="#1e3060"); (e.currentTarget.style.transform="none"); } }}>
+                <span className="text-xs font-black px-2 py-0.5 rounded flex-shrink-0 mt-0.5"
+                  style={{ background: "#0f1d40", color: "#8899bb", fontFamily: "'Orbitron',sans-serif" }}>{labels[i]}</span>
+                <span>{opt}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Feedback */}
+        {answered && (
+          <div className="rounded-xl p-4 mb-5 animate-fade-in-up"
+            style={{ background: "#121e3d", border: `1px solid ${answered.correct ? "#00FF87" : "#ff4d6d"}` }}>
+            <p className="text-xs font-black tracking-widest mb-1"
+              style={{ color: answered.correct ? "#00FF87" : "#ff4d6d", fontFamily: "'Orbitron',sans-serif" }}>
+              {answered.correct ? "✓ CORRETO!" : "✗ ERRADO!"}
+            </p>
+            <p className="text-sm leading-relaxed" style={{ color: "#aabbcc" }}>{q.explanation}</p>
+          </div>
+        )}
+
+        {/* Nav */}
+        <div className="flex gap-3">
+          <button onClick={() => advance(-1)} disabled={qIndex === 0}
+            className="px-5 py-3 font-bold text-sm tracking-wide rounded-lg transition-all clip-chamfer-sm disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{ background: "#1a2850", border: "1px solid #1e3060", color: "#fff", fontFamily: "Montserrat", cursor: qIndex > 0 ? "pointer" : "not-allowed" }}
+            onMouseEnter={e => { if (qIndex > 0) (e.currentTarget.style.borderColor="#00FF87"); }}
+            onMouseLeave={e => (e.currentTarget.style.borderColor="#1e3060")}>
+            ← Voltar
+          </button>
+          <button onClick={() => advance(1)}
+            className="flex-1 py-3 font-black text-sm tracking-wide rounded-lg transition-all clip-chamfer-sm"
+            style={{ background: "#00FF87", color: "#0B132B", border: "none", fontFamily: "Montserrat", cursor: "pointer" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "#33ffaa")}
+            onMouseLeave={e => (e.currentTarget.style.background = "#00FF87")}>
+            {qIndex === total - 1 ? "Concluir ✓" : "Avançar →"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

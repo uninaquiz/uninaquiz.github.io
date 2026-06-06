@@ -1,203 +1,148 @@
-import React, { useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { PageTitle } from "@/components/ui/PageTitle";
-import { SectionTitle } from "@/components/ui/SectionTitle";
-import { Card } from "@/components/ui/Card";
-import { TechCard } from "@/components/ui/TechCard";
-import { getAssetPath } from "@/utils/assets";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiGetHistory, apiDeleteHistory, HistoryItem } from "@/services/api";
 
-export const Home: React.FC = () => {
-  const animationVideoRef = useRef<HTMLVideoElement>(null);
-  const presentationVideoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+type Difficulty = "easy" | "medium" | "hard";
+
+interface Props { username: string; }
+
+export const Home: React.FC<Props> = ({ username }) => {
+  const navigate = useNavigate();
+  const [topic, setTopic] = useState("");
+  const [difficulty, setDifficulty] = useState<Difficulty>("easy");
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
   useEffect(() => {
-    if (animationVideoRef.current) {
-      animationVideoRef.current.play().catch(() => {});
-    }
-  }, []);
+    apiGetHistory(username).then(setHistory).catch(console.error);
+  }, [username]);
 
-  const technologies = [
-    { name: "React 19", desc: "Framework JavaScript moderno" },
-    { name: "TypeScript", desc: "Tipagem estática" },
-    { name: "Web Audio API", desc: "Áudio procedural" },
-    { name: "Web Speech API", desc: "Síntese de voz" },
-    { name: "Vite", desc: "Build tool rápido" },
-    { name: "Tailwind CSS", desc: "Estilização moderna" },
-  ];
+  const handleGenerate = () => {
+    if (!topic.trim()) return;
+    navigate("/quiz", { state: { topic: topic.trim(), difficulty } });
+  };
+
+  const handleDelete = async (id: string) => {
+    await apiDeleteHistory(username, id).catch(console.error);
+    setHistory(h => h.filter(x => x.id !== id));
+  };
+
+  const diffConfig: Record<Difficulty, { label: string; active: React.CSSProperties }> = {
+    easy:   { label: "Fácil",   active: { background: "#003322", borderColor: "#00FF87", color: "#00FF87" } },
+    medium: { label: "Médio",   active: { background: "#332200", borderColor: "#ffb800", color: "#ffb800" } },
+    hard:   { label: "Difícil", active: { background: "#330011", borderColor: "#ff4d6d", color: "#ff4d6d" } },
+  };
+  const diffBadge: Record<Difficulty, React.CSSProperties> = {
+    easy:   { background: "#003322", color: "#00FF87" },
+    medium: { background: "#332200", color: "#ffb800" },
+    hard:   { background: "#330011", color: "#ff4d6d" },
+  };
 
   return (
-    <div className="min-h-screen pt-20 pb-12 px-4 sm:px-6 lg:px-8">
-      <div className="container mx-auto max-w-7xl">
-        <PageTitle>EduVoice Interactive</PageTitle>
+    <div className="min-h-screen pt-20 pb-16 px-4 relative z-10">
+      <div className="max-w-3xl mx-auto">
 
-        <div className="flex justify-center mb-6 sm:mb-8">
-          <img
-            key="hero-image"
-            src={getAssetPath("assets/imagem-vetorial.jpeg")}
-            alt="EduVoice Interactive - Ilustração"
-            className="w-full max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg rounded-2xl shadow-2xl border-4 border-blue-500/30"
-            loading="eager"
-          />
-        </div>
-
-        <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-slate-300 mb-6 sm:mb-8 max-w-3xl mx-auto text-center px-2">
-          Uma plataforma educacional imersiva com banco de questões sobre
-          Sistemas Multimídia, oferecendo quizzes interativos narrados por voz
-          sintética.
-        </p>
-
-        <div className="flex justify-center mb-12 sm:mb-16">
-          <Link
-            to="/quiz"
-            className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-blue-600 hover:bg-blue-700 text-white text-base sm:text-lg font-semibold rounded-lg transition-all transform hover:scale-105 shadow-lg hover:shadow-xl w-full sm:w-auto justify-center max-w-xs sm:max-w-none"
-          >
-            Começar Quiz
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 7l5 5m0 0l-5 5m5-5H6"
-              />
-            </svg>
-          </Link>
-        </div>
-
-        <section className="mb-12 sm:mb-16">
-          <SectionTitle>Sobre o Projeto</SectionTitle>
-          <Card>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 items-center">
-              <div className="flex justify-center">
-                <video
-                  ref={animationVideoRef}
-                  key="animation-video"
-                  loop
-                  muted
-                  playsInline
-                  preload="auto"
-                  className="w-full max-w-xs sm:max-w-sm rounded-lg shadow-lg border-2 border-blue-500/30"
-                >
-                  <source
-                    src={getAssetPath("assets/animation.mp4")}
-                    type="video/mp4"
-                  />
-                  Seu navegador não suporta vídeos em loop.
-                </video>
+        {/* Hero */}
+        <div className="text-center mb-12 animate-fade-in-up">
+          <p className="text-xs font-bold tracking-widest mb-3" style={{ color: "#00FF87" }}>
+            BEM-VINDO, {username.toUpperCase()}!
+          </p>
+          <h1 className="text-4xl sm:text-5xl font-black mb-4 leading-tight"
+            style={{ fontFamily: "'Orbitron',sans-serif" }}>
+            ENTRE NA <span style={{ color: "#00FF87" }}>ARENA</span><br />DO QUIZ
+          </h1>
+          <p className="text-sm leading-relaxed max-w-lg mx-auto mb-8" style={{ color: "#8899bb" }}>
+            Digite o tema do seu desafio, escolha a dificuldade e deixe a IA gerar um quiz personalizado.
+          </p>
+          <div className="flex flex-wrap justify-center gap-4">
+            {[["01","Digite o tema"],["02","Escolha a dificuldade"],["03","Responda e pontue"]].map(([n,t]) => (
+              <div key={n} className="clip-chamfer-sm px-5 py-4 w-44 text-center"
+                style={{ background: "#121e3d", border: "1px solid #1e3060" }}>
+                <div className="text-2xl font-black mb-1" style={{ color: "#00FF87", fontFamily: "'Orbitron',sans-serif" }}>{n}</div>
+                <div className="text-xs" style={{ color: "#8899bb" }}>{t}</div>
               </div>
-
-              <div className="prose prose-invert max-w-none">
-                <p className="text-lg text-slate-300 leading-relaxed mb-4">
-                  O EduVoice Interactive é uma plataforma inovadora que combina
-                  tecnologia de ponta com educação, oferecendo uma experiência
-                  de aprendizado única e envolvente.
-                </p>
-                <h3 className="text-xl font-semibold text-blue-400 mb-3">
-                  🚀 Funcionalidades Principais:
-                </h3>
-                <ul className="text-slate-300 space-y-2 list-disc list-inside">
-                  <li>
-                    <strong>Banco de Questões:</strong> 30 questões sobre
-                    Sistemas Multimídia com seleção aleatória de 5 perguntas
-                    por quiz
-                  </li>
-                  <li>
-                    <strong>Narrador por Voz (TTS):</strong> Voz sintética
-                    natural para ler perguntas e feedbacks
-                  </li>
-                  <li>
-                    <strong>Motor de Áudio Híbrido:</strong> Trilhas
-                    procedurais, e upload de arquivos locais
-                  </li>
-                  <li>
-                    <strong>Controles Avançados:</strong> Mixer independente
-                    para volume de música e voz
-                  </li>
-                  <li>
-                    <strong>Interface Reativa:</strong> Design moderno e
-                    responsivo com visualizadores de áudio
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </Card>
-        </section>
-
-        <section className="mb-16">
-          <SectionTitle>Vídeo de Apresentação</SectionTitle>
-          <Card className="p-4">
-            <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden">
-              <video
-                ref={presentationVideoRef}
-                key="presentation-video"
-                controls
-                preload="metadata"
-                className="w-full h-full"
-              >
-                <source
-                  src={getAssetPath("assets/video.mp4")}
-                  type="video/mp4"
-                />
-                Seu navegador não suporta a reprodução de vídeo.
-              </video>
-            </div>
-          </Card>
-        </section>
-
-        <section className="mb-16">
-          <SectionTitle>Áudio de Apresentação</SectionTitle>
-          <Card>
-            <div className="flex flex-col items-center justify-center">
-              <div className="mb-6 text-center">
-                <svg
-                  className="w-16 h-16 mx-auto mb-4 text-blue-400"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <p className="text-slate-300 mb-4">
-                  Ouça a apresentação do projeto
-                </p>
-              </div>
-              <audio
-                ref={audioRef}
-                key="intro-audio"
-                controls
-                preload="metadata"
-                className="w-full max-w-md"
-              >
-                <source
-                  src={getAssetPath("assets/intro.ogg")}
-                  type="audio/ogg"
-                />
-                Seu navegador não suporta a reprodução de áudio.
-              </audio>
-            </div>
-          </Card>
-        </section>
-
-        <section>
-          <SectionTitle>Tecnologias Utilizadas</SectionTitle>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {technologies.map((tech) => (
-              <TechCard
-                key={tech.name}
-                name={tech.name}
-                description={tech.desc}
-              />
             ))}
           </div>
-        </section>
+        </div>
+
+        {/* Generator */}
+        <div className="relative overflow-hidden rounded-2xl mb-8 p-8 top-line"
+          style={{ background: "#121e3d", border: "1px solid #1e3060" }}>
+          <p className="text-xs font-bold tracking-widest mb-3" style={{ color: "#00FF87" }}>⚡ GERAR NOVO QUIZ</p>
+          <input
+            id="topicInput"
+            type="text" value={topic}
+            onChange={e => setTopic(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleGenerate()}
+            placeholder="Digite o tema do seu próximo desafio..."
+            maxLength={80}
+            className="w-full px-4 py-3.5 rounded-lg text-sm outline-none mb-5 clip-chamfer"
+            style={{ background: "#0f1d40", border: "1px solid #1e3060", color: "#fff", fontFamily: "Montserrat" }}
+            onFocus={e => e.target.style.borderColor = "#00FF87"}
+            onBlur={e => e.target.style.borderColor = "#1e3060"}
+          />
+
+          <p className="text-xs font-bold tracking-widest mb-3" style={{ color: "#00FF87" }}>DIFICULDADE</p>
+          <div className="flex gap-3 mb-6">
+            {(["easy","medium","hard"] as Difficulty[]).map(d => (
+              <button key={d} onClick={() => setDifficulty(d)}
+                className="flex-1 py-2.5 rounded-lg text-xs font-bold tracking-wide transition-all clip-chamfer-sm"
+                style={difficulty === d
+                  ? { ...diffConfig[d].active, border: "1px solid", fontFamily: "Montserrat" }
+                  : { background: "#0f1d40", border: "1px solid #1e3060", color: "#8899bb", fontFamily: "Montserrat" }}>
+                {diffConfig[d].label}
+              </button>
+            ))}
+          </div>
+
+          <button onClick={handleGenerate} disabled={!topic.trim()}
+            className="w-full py-4 font-black text-sm tracking-wide transition-all clip-chamfer disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "#00FF87", color: "#0B132B", borderRadius: "8px", fontFamily: "Montserrat", border: "none", cursor: topic.trim() ? "pointer" : "not-allowed" }}
+            onMouseEnter={e => { if (topic.trim()) { (e.currentTarget.style.background="#33ffaa"); (e.currentTarget.style.boxShadow="0 0 30px rgba(0,255,135,0.35)"); } }}
+            onMouseLeave={e => { (e.currentTarget.style.background="#00FF87"); (e.currentTarget.style.boxShadow="none"); }}>
+            ⚔ GERAR MASMORRA DO QUIZ
+          </button>
+        </div>
+
+        {/* History */}
+        <div className="rounded-2xl p-6" style={{ background: "#121e3d", border: "1px solid #1e3060" }}>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-xs font-bold tracking-widest" style={{ color: "#00FF87", fontFamily: "'Orbitron',sans-serif" }}>⏱ CHECKPOINT HISTORY</span>
+            <div className="flex-1 h-px" style={{ background: "#1e3060" }} />
+          </div>
+          {history.length === 0 ? (
+            <p className="text-xs text-center py-4" style={{ color: "#8899bb" }}>Nenhum quiz jogado ainda. Hora de começar!</p>
+          ) : (
+            <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+              {[...history].reverse().map(item => (
+                <div key={item.id}
+                  onClick={() => navigate("/quiz", { state: { topic: item.topic, difficulty: item.difficulty } })}
+                  className="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition-all"
+                  style={{ background: "#0f1d40", border: "1px solid #1e3060" }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = "#00FF87")}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = "#1e3060")}>
+                  <div>
+                    <div className="font-bold text-sm text-white">{item.topic}</div>
+                    <div className="text-xs mt-0.5" style={{ color: "#8899bb" }}>
+                      {new Date(item.createdAt).toLocaleDateString("pt-BR")} • {item.total} questões
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded" style={diffBadge[item.difficulty]}>
+                      {diffConfig[item.difficulty].label.toUpperCase()}
+                    </span>
+                    <span className="text-sm font-bold" style={{ color: "#00FF87", fontFamily: "'Orbitron',sans-serif" }}>
+                      {item.score ?? "—"}/{item.total}
+                    </span>
+                    <button onClick={e => { e.stopPropagation(); handleDelete(item.id); }}
+                      style={{ color: "#8899bb", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem" }}
+                      onMouseEnter={e => (e.currentTarget.style.color = "#ff4d6d")}
+                      onMouseLeave={e => (e.currentTarget.style.color = "#8899bb")}>✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
