@@ -29,6 +29,14 @@ export const AppRouter: React.FC = () => {
           }
         />
         <Route
+          path="/quiz/:id"
+          element={
+            <AuthGuard>
+              <Quiz />
+            </AuthGuard>
+          }
+        />
+        <Route
           path="/quiz"
           element={
             <AuthGuard>

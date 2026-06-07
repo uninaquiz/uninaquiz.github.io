@@ -24,7 +24,7 @@ type UseQuizSessionReturn = {
 export function useQuizSession(
   questions: Question[],
   topic: string,
-  difficulty: Difficulty
+  difficulty: Difficulty,
 ): UseQuizSessionReturn {
   const [session] = useState<QuizSession>(() => ({
     id: crypto.randomUUID(),

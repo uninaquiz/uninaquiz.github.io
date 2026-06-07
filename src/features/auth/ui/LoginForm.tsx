@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
 import { loginApi, registerApi } from "@/features/auth/api/auth-api";
 import { useAuthStore } from "@/features/auth/model/auth-store";
 import { Input } from "@/shared/ui/atoms";
@@ -16,46 +17,54 @@ export const LoginForm: React.FC = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [validationError, setValidationError] = useState("");
+
+  const authMutation = useMutation({
+    mutationFn: ({ username, password }: { username: string; password: string }) =>
+      mode === "login"
+        ? loginApi(username, password)
+        : registerApi(username, password),
+    onSuccess: (user) => {
+      setUser(user);
+      navigate("/");
+    },
+  });
+
+  const error =
+    validationError ||
+    (authMutation.error instanceof Error
+      ? authMutation.error.message
+      : authMutation.error
+        ? "Erro desconhecido"
+        : "");
 
   const validate = (): boolean => {
     if (username.trim().length < 3) {
-      setError("Usuário precisa ter mínimo 3 caracteres.");
+      setValidationError("Usuário precisa ter mínimo 3 caracteres.");
       return false;
     }
     if (password.length < 6) {
-      setError("Senha precisa ter mínimo 6 caracteres.");
+      setValidationError("Senha precisa ter mínimo 6 caracteres.");
       return false;
     }
     if (mode === "register" && password !== password2) {
-      setError("As senhas não conferem.");
+      setValidationError("As senhas não conferem.");
       return false;
     }
     return true;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
+    setValidationError("");
+    authMutation.reset();
     if (!validate()) return;
-    setLoading(true);
-    setError("");
-    try {
-      const user =
-        mode === "login"
-          ? await loginApi(username.trim(), password)
-          : await registerApi(username.trim(), password);
-      setUser(user);
-      navigate("/");
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erro desconhecido");
-    } finally {
-      setLoading(false);
-    }
+    authMutation.mutate({ username: username.trim(), password });
   };
 
   const switchMode = () => {
     setMode((m) => (m === "login" ? "register" : "login"));
-    setError("");
+    setValidationError("");
+    authMutation.reset();
     setPassword("");
     setPassword2("");
   };
@@ -96,7 +105,7 @@ export const LoginForm: React.FC = () => {
               type="text"
               value={username}
               placeholder="seu_nick"
-              onChange={(e) => { setUsername(e.target.value); setError(""); }}
+              onChange={(e) => { setUsername(e.target.value); setValidationError(""); }}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             />
             <Input
@@ -105,7 +114,7 @@ export const LoginForm: React.FC = () => {
               type="password"
               value={password}
               placeholder="mín. 6 caracteres"
-              onChange={(e) => { setPassword(e.target.value); setError(""); }}
+              onChange={(e) => { setPassword(e.target.value); setValidationError(""); }}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             />
             {mode === "register" && (
@@ -115,7 +124,7 @@ export const LoginForm: React.FC = () => {
                 type="password"
                 value={password2}
                 placeholder="repita a senha"
-                onChange={(e) => { setPassword2(e.target.value); setError(""); }}
+                onChange={(e) => { setPassword2(e.target.value); setValidationError(""); }}
                 onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
               />
             )}
@@ -136,7 +145,7 @@ export const LoginForm: React.FC = () => {
             <Button
               variant="primary"
               size="lg"
-              isLoading={loading}
+              isLoading={authMutation.isPending}
               onClick={handleSubmit}
               style={{ width: "100%" }}
             >

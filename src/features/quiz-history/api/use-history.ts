@@ -2,9 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getHistoryApi,
   deleteHistoryItemApi,
-  saveHistoryItemApi,
+  saveQuizScoreApi,
 } from "@/features/quiz-session/api/quiz-api";
-import type { HistoryItem } from "@/entities/quiz";
 
 export const HISTORY_QUERY_KEY = ["quiz", "history"] as const;
 
@@ -15,10 +14,10 @@ export function useHistory() {
   });
 }
 
-export function useSaveHistory() {
+export function useSaveQuizScore() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (item: HistoryItem) => saveHistoryItemApi(item),
+    mutationFn: ({ id, score }: { id: string; score: number }) => saveQuizScoreApi(id, score),
     onSuccess: () => qc.invalidateQueries({ queryKey: HISTORY_QUERY_KEY }),
   });
 }

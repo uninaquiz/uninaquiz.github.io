@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { generateQuizApi } from "@/features/quiz-session/api/quiz-api";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuizById, useGenerateQuiz } from "@/features/quiz-session/api/use-quiz-data";
 import { useQuizSession } from "@/features/quiz-session/model/use-quiz-session";
-import { useSaveHistory } from "@/features/quiz-history/api/use-history";
+import { useSaveQuizScore } from "@/features/quiz-history/api/use-history";
 import { audioService } from "@/shared/lib/audio";
 import { spawnConfetti } from "@/shared/lib/confetti";
 import { getAssetPath } from "@/shared/lib/assets";
@@ -11,26 +12,27 @@ import type { Question, Difficulty } from "@/entities/quiz";
 export const Quiz: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { topic, difficulty } = (location.state || {}) as { topic?: string; difficulty?: Difficulty };
+  const { id } = useParams<{ id?: string }>();
+  const { topic: stateTopic, difficulty: stateDifficulty } = (location.state || {}) as {
+    topic?: string;
+    difficulty?: Difficulty;
+  };
 
-  const [questions, setQuestions] = useState<Question[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [muted, setMuted] = useState(false);
+  const saveScore = useSaveQuizScore();
+  const queryClient = useQueryClient();
 
-  const saveHistory = useSaveHistory();
+  const generatedQuiz = useGenerateQuiz(stateTopic, stateDifficulty ?? "easy");
+  const quizById = useQuizById(!stateTopic ? id : undefined);
+  const quizQuery = stateTopic ? generatedQuiz : quizById;
 
   useEffect(() => {
-    if (!topic) { navigate("/"); return; }
-    generateQuizApi({ topic, difficulty: difficulty ?? "easy" })
-      .then((res) => {
-        setQuestions(res.questions.map((q, i) => ({ ...q, id: i + 1 })));
-      })
-      .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : "Erro ao gerar quiz");
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    if (stateTopic && generatedQuiz.isSuccess && generatedQuiz.data) {
+      queryClient.setQueryData(["quiz", "by-id", generatedQuiz.data.id], generatedQuiz.data);
+      queryClient.invalidateQueries({ queryKey: ["quiz", "history"] });
+      navigate(`/quiz/${generatedQuiz.data.id}`, { replace: true });
+    }
+  }, [generatedQuiz.isSuccess]);
 
   const toggleMute = () => {
     const next = !muted;
@@ -38,21 +40,25 @@ export const Quiz: React.FC = () => {
     audioService.setMuted(next);
   };
 
-  if (!topic) return null;
+  if (!id && !stateTopic) return null;
 
-  if (loading) return (
+  if (quizQuery.isLoading) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 relative z-10 pt-20">
       <div className="loader-ring" />
-      <p className="text-xs tracking-widest" style={{ color: "#8899bb" }}>GERANDO MASMORRA DO QUIZ...</p>
+      <p className="text-xs tracking-widest" style={{ color: "#8899bb" }}>
+        {stateTopic ? "GERANDO MASMORRA DO QUIZ..." : "CARREGANDO QUIZ..."}
+      </p>
     </div>
   );
 
-  if (error) return (
+  if (quizQuery.isError) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 relative z-10 pt-20 px-4">
       <div className="text-center p-8 rounded-2xl max-w-md"
         style={{ background: "#121e3d", border: "1px solid #ff4d6d" }}>
         <p className="font-bold mb-2" style={{ color: "#ff4d6d" }}>ERRO AO GERAR QUIZ</p>
-        <p className="text-sm mb-6" style={{ color: "#8899bb" }}>{error}</p>
+        <p className="text-sm mb-6" style={{ color: "#8899bb" }}>
+          {quizQuery.error instanceof Error ? quizQuery.error.message : "Erro desconhecido"}
+        </p>
         <button onClick={() => navigate("/")}
           className="px-6 py-3 font-bold text-sm clip-chamfer-sm"
           style={{ background: "#00FF87", color: "#0B132B", borderRadius: "8px", border: "none", cursor: "pointer", fontFamily: "Montserrat" }}>
@@ -62,16 +68,16 @@ export const Quiz: React.FC = () => {
     </div>
   );
 
-  if (!questions) return null;
+  if (!quizQuery.data) return null;
 
   return (
     <QuizSession
-      questions={questions}
-      topic={topic}
-      difficulty={difficulty ?? "easy"}
+      questions={quizQuery.data.questions}
+      topic={quizQuery.data.topic}
+      difficulty={quizQuery.data.difficulty}
       muted={muted}
       onToggleMute={toggleMute}
-      onSaveHistory={(item) => saveHistory.mutate(item)}
+      onSaveScore={(score) => saveScore.mutate({ id: quizQuery.data!.id, score })}
       onFinish={(score, total) => {
         if (score / total >= 0.6) spawnConfetti();
       }}
@@ -80,20 +86,19 @@ export const Quiz: React.FC = () => {
   );
 };
 
-// ── Inner session component ────────────────────────────────────────────────────
 type QuizSessionProps = {
   questions: Question[];
   topic: string;
   difficulty: Difficulty;
   muted: boolean;
   onToggleMute: () => void;
-  onSaveHistory: (item: import("@/entities/quiz").HistoryItem) => void;
+  onSaveScore: (score: number) => void;
   onFinish: (score: number, total: number) => void;
   onExit: () => void;
 };
 
 const QuizSession: React.FC<QuizSessionProps> = ({
-  questions, topic, difficulty, muted, onToggleMute, onSaveHistory, onFinish, onExit,
+  questions, topic, difficulty, muted, onToggleMute, onSaveScore, onFinish, onExit,
 }) => {
   const navigate = useNavigate();
   const { session, qIndex, score, answers, finished, selectOption, advance } =
@@ -111,14 +116,21 @@ const QuizSession: React.FC<QuizSessionProps> = ({
     const historyItem = advance(dir);
     if (historyItem) {
       onFinish(historyItem.score, historyItem.total);
-      onSaveHistory(historyItem);
+      onSaveScore(historyItem.score);
     }
+  };
+
+  const handleExit = () => {
+    const answeredCount = answers.filter(Boolean).length;
+    if (answeredCount > 0) {
+      onSaveScore(answers.filter((a) => a?.correct).length);
+    }
+    onExit();
   };
 
   const labels = ["A", "B", "C", "D"];
   const total = session.questions.length;
 
-  // ── Result screen ────────────────────────────────────────────────────────
   if (finished) {
     const pct = Math.round(score / total * 100);
     const msgs: [number, string][] = [
@@ -156,7 +168,6 @@ const QuizSession: React.FC<QuizSessionProps> = ({
     );
   }
 
-  // ── Active question screen ───────────────────────────────────────────────
   const q = session.questions[qIndex];
   const answered = answers[qIndex];
 
@@ -166,11 +177,10 @@ const QuizSession: React.FC<QuizSessionProps> = ({
         style={{ background: "repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,135,0.01) 2px,rgba(0,255,135,0.01) 4px)" }} />
       <div className="max-w-2xl mx-auto relative z-10">
 
-        {/* Header row */}
         <div className="flex items-center justify-between mb-5">
           <div className="px-3 py-1.5 rounded-full text-xs font-bold tracking-widest truncate max-w-[160px]"
             style={{ background: "#1a2850", border: "1px solid #1e3060", color: "#00FF87" }}>
-            {session.topic.toUpperCase()}
+            {session?.topic.toUpperCase()}
           </div>
           <div className="flex items-center gap-1.5" style={{ fontFamily: "'Orbitron',sans-serif" }}>
             <span style={{ color: "#ffb800" }}>★</span>
@@ -183,7 +193,7 @@ const QuizSession: React.FC<QuizSessionProps> = ({
               style={{ background: "#1a2850", border: `1px solid ${muted ? "#ff4d6d" : "#1e3060"}`, color: muted ? "#ff4d6d" : "#8899bb", cursor: "pointer", fontFamily: "Montserrat" }}>
               {muted ? "🔇" : "🔊"}
             </button>
-            <button onClick={onExit}
+            <button onClick={handleExit}
               className="px-3 py-1.5 text-xs font-bold tracking-wide rounded transition-all"
               style={{ background: "#1a2850", border: "1px solid #1e3060", color: "#8899bb", cursor: "pointer", fontFamily: "Montserrat" }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#ff4d6d"; e.currentTarget.style.color = "#ff4d6d"; }}
@@ -193,7 +203,6 @@ const QuizSession: React.FC<QuizSessionProps> = ({
           </div>
         </div>
 
-        {/* Progress */}
         <div className="flex justify-between text-xs font-bold mb-2" style={{ color: "#8899bb" }}>
           <span>QUESTÃO {qIndex + 1}/{total}</span>
         </div>
@@ -202,14 +211,12 @@ const QuizSession: React.FC<QuizSessionProps> = ({
             style={{ width: `${((qIndex + 1) / total) * 100}%`, background: "linear-gradient(90deg,#00cc6a,#00FF87)", boxShadow: "0 0 8px rgba(0,255,135,0.4)" }} />
         </div>
 
-        {/* Question */}
         <div className="relative overflow-hidden rounded-2xl p-8 mb-5 top-line animate-fade-in-up"
           style={{ background: "#121e3d", border: "1px solid #1e3060" }}>
           <p className="text-xs font-bold tracking-widest mb-3" style={{ color: "#00FF87" }}>QUESTÃO {qIndex + 1}</p>
           <p className="text-lg sm:text-xl font-bold leading-snug text-white">{q.text}</p>
         </div>
 
-        {/* Options */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           {q.options.map((opt, i) => {
             let style: React.CSSProperties = { background: "#1a2850", border: "1px solid #1e3060", color: "#fff", fontFamily: "Montserrat" };
@@ -233,7 +240,6 @@ const QuizSession: React.FC<QuizSessionProps> = ({
           })}
         </div>
 
-        {/* Feedback */}
         {answered && (
           <div className="rounded-xl p-4 mb-5 animate-fade-in-up"
             style={{ background: "#121e3d", border: `1px solid ${answered.correct ? "#00FF87" : "#ff4d6d"}` }}>
@@ -245,7 +251,6 @@ const QuizSession: React.FC<QuizSessionProps> = ({
           </div>
         )}
 
-        {/* Nav */}
         <div className="flex gap-3">
           <button onClick={() => handleAdvance(-1)} disabled={qIndex === 0}
             className="px-5 py-3 font-bold text-sm tracking-wide rounded-lg transition-all clip-chamfer-sm disabled:opacity-30 disabled:cursor-not-allowed"

@@ -49,7 +49,7 @@ describe("LoginForm", () => {
 
   it("shows server error on failed login", async () => {
     server.use(
-      http.post("/auth/login", () =>
+      http.post("/api/auth/login", () =>
         HttpResponse.json({ message: "Usuário ou senha incorretos." }, { status: 401 })
       )
     );

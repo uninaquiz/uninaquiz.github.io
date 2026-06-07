@@ -16,7 +16,7 @@ export async function httpRequest<T>(
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (_token) headers["Authorization"] = `Bearer ${_token}`;
 
-  const res = await fetch(`${env.apiUrl}${path}`, {
+  const res = await fetch(`${env.apiUrl}/api${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,

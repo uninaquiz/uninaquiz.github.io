@@ -23,5 +23,15 @@ export type GenerateQuizRequest = {
 };
 
 export type GenerateQuizResponse = {
+  id: string;
+  topic: string;
+  difficulty: Difficulty;
+  total: number;
+  questions: Omit<Question, "id">[];
+};
+
+export type GetQuizByIdResponse = {
+  topic: string;
+  difficulty: Difficulty;
   questions: Omit<Question, "id">[];
 };

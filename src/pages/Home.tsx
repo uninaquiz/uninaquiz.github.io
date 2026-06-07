@@ -34,7 +34,7 @@ export const Home: React.FC = () => {
   };
 
   const goToQuiz = (item: HistoryItem) => {
-    navigate("/quiz", { state: { topic: item.topic, difficulty: item.difficulty } });
+    navigate(`/quiz/${item.id}`);
   };
 
   const diffConfig: Record<Difficulty, { active: React.CSSProperties }> = {

@@ -1,1 +1,1 @@
-export type { Difficulty, Question, HistoryItem, GenerateQuizRequest, GenerateQuizResponse } from "./model";
+export type { Difficulty, Question, HistoryItem, GenerateQuizRequest, GenerateQuizResponse, GetQuizByIdResponse } from "./model";
