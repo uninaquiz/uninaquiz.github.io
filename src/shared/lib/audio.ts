@@ -1,10 +1,13 @@
+type VendorWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
+
 class AudioService {
   private context: AudioContext | null = null;
   private muted = false;
 
   private getCtx(): AudioContext {
     if (!this.context) {
-      this.context = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioCtx = (window as VendorWindow).webkitAudioContext ?? AudioContext;
+      this.context = new AudioCtx();
     }
     if (this.context.state === "suspended") this.context.resume();
     return this.context;
@@ -18,7 +21,7 @@ class AudioService {
     try {
       const ctx = this.getCtx();
       if (type === "correct") {
-        [[523,0],[659,0.08],[784,0.16],[1047,0.24]].forEach(([f,t]) => {
+        ([[523, 0], [659, 0.08], [784, 0.16], [1047, 0.24]] as [number, number][]).forEach(([f, t]) => {
           const o = ctx.createOscillator();
           const g = ctx.createGain();
           o.type = "square"; o.frequency.value = f;
@@ -29,7 +32,7 @@ class AudioService {
           o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.15);
         });
       } else if (type === "wrong") {
-        [[220,0],[185,0.1],[155,0.2]].forEach(([f,t]) => {
+        ([[220, 0], [185, 0.1], [155, 0.2]] as [number, number][]).forEach(([f, t]) => {
           const o = ctx.createOscillator();
           const g = ctx.createGain();
           o.type = "sawtooth"; o.frequency.value = f;
@@ -47,17 +50,10 @@ class AudioService {
         o.connect(g); g.connect(ctx.destination);
         o.start(); o.stop(ctx.currentTime + 0.06);
       }
-    } catch {}
+    } catch {
+      // Audio API not available — silently ignore
+    }
   }
-
-  // No-op stubs to keep compatibility with existing hooks
-  async initialize() {}
-  startAmbientMusic() {}
-  stopMusic() {}
-  async playTrack(_: string) {}
-  async playFile(_: string) {}
-  setMusicVolume(_: number) {}
-  setVoiceVolume(_: number) {}
 }
 
 export const audioService = new AudioService();

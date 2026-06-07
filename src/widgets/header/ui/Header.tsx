@@ -1,14 +1,19 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { getAssetPath } from "@/utils/assets";
+import { useAuthStore } from "@/features/auth/model/auth-store";
+import { logoutApi } from "@/features/auth/api/auth-api";
+import { getAssetPath } from "@/shared/lib/assets";
 
-interface Props {
-  username: string;
-  onLogout: () => void;
-}
-
-export const Header: React.FC<Props> = ({ username, onLogout }) => {
+export const Header: React.FC = () => {
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+
+  const handleLogout = async () => {
+    await logoutApi();
+    logout();
+    navigate("/login");
+  };
 
   return (
     <header
@@ -20,8 +25,6 @@ export const Header: React.FC<Props> = ({ username, onLogout }) => {
       }}
     >
       <nav className="container mx-auto px-6 h-16 flex items-center justify-between">
-
-        {/* Fix 4: logo como <button> para acessibilidade */}
         <button
           type="button"
           onClick={() => navigate("/")}
@@ -35,15 +38,16 @@ export const Header: React.FC<Props> = ({ username, onLogout }) => {
         </button>
 
         <div className="flex items-center gap-4">
-          <span style={{ color: "#8899bb", fontSize: "0.75rem" }}>
-            Jogador:{" "}
-            <span style={{ color: "#00FF87", fontWeight: 700 }}>
-              {username.toUpperCase()}
+          {user && (
+            <span style={{ color: "#8899bb", fontSize: "0.75rem" }}>
+              Jogador:{" "}
+              <span style={{ color: "#00FF87", fontWeight: 700 }}>
+                {user.username.toUpperCase()}
+              </span>
             </span>
-          </span>
-
+          )}
           <button
-            onClick={onLogout}
+            onClick={handleLogout}
             style={{
               background: "transparent",
               border: "1px solid #1e3060",
@@ -57,11 +61,11 @@ export const Header: React.FC<Props> = ({ username, onLogout }) => {
               cursor: "pointer",
               transition: "all 0.2s",
             }}
-            onMouseEnter={e => {
+            onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = "#ff4d6d";
               e.currentTarget.style.color = "#ff4d6d";
             }}
-            onMouseLeave={e => {
+            onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = "#1e3060";
               e.currentTarget.style.color = "#8899bb";
             }}
@@ -69,7 +73,6 @@ export const Header: React.FC<Props> = ({ username, onLogout }) => {
             SAIR
           </button>
         </div>
-
       </nav>
     </header>
   );
