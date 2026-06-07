@@ -2,14 +2,22 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./src/App";
 
-const rootElement = document.getElementById("root");
-if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
+async function bootstrap() {
+  if (import.meta.env.DEV && !import.meta.env.VITE_API_URL) {
+    const { worker } = await import("./src/mocks/browser");
+    await worker.start({ onUnhandledRequest: "warn" });
+  }
+
+  const rootElement = document.getElementById("root");
+  if (!rootElement) {
+    throw new Error("Could not find root element to mount to");
+  }
+
+  ReactDOM.createRoot(rootElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
 }
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+bootstrap();
