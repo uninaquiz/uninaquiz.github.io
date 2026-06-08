@@ -20,8 +20,7 @@ concurrency:
 jobs:
   build:
     uses: ./.github/workflows/build.yml
-    secrets:
-      VITE_API_URL: ${{ secrets.VITE_API_URL }}
+    secrets: inherit
     with:
       node-version: 20.x
 
