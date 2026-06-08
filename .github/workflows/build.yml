@@ -38,6 +38,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Validate env vars
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            echo "::error::VITE_API_URL is not set or empty"
+            exit 1
+          fi
+          echo "VITE_API_URL is set ✓"
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
       - name: Build
         run: pnpm run build
         env:
